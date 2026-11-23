@@ -61,7 +61,7 @@ class SmbTarget private constructor(
         if (share.fileExists(path)) share.getFileInformation(path).standardInformation.endOfFile else null
 
     /** Écrit dans "nom.part" puis renomme : jamais de photo à moitié copiée sous son vrai nom. */
-    fun upload(input: InputStream, path: String): Long {
+    fun upload(input: InputStream, path: String, replace: Boolean = false): Long {
         val tmp = "$path.part"
         var written = 0L
         try {
@@ -82,7 +82,7 @@ class SmbTarget private constructor(
                         written += n
                     }
                 }
-                file.rename(path, false)
+                file.rename(path, replace)
             }
         } catch (e: Exception) {
             runCatching { if (share.fileExists(tmp)) share.rm(tmp) }

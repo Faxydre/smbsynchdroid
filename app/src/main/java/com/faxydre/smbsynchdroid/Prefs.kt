@@ -18,6 +18,12 @@ enum class Layout(val label: String) {
     YEAR_MONTH_DAY("Année / Mois / Jour  (2026\\11\\23\\)"),
 }
 
+/** Que faire quand une photo déjà envoyée est retouchée sur la tablette. */
+enum class EditMode(val label: String) {
+    KEEP_BOTH("Garder les deux (retouche envoyée en nom_1.jpg)"),
+    REPLACE("Remplacer la photo sur le NAS"),
+}
+
 data class SmbSettings(
     val host: String,
     val share: String,
@@ -27,6 +33,7 @@ data class SmbSettings(
     val domain: String,
     val sourceDir: String,
     val layout: Layout,
+    val editMode: EditMode,
     val wifiOnly: Boolean,
     val enabled: Boolean,
 ) {
@@ -46,6 +53,8 @@ class Prefs(context: Context) {
         sourceDir = sp.getString("sourceDir", DEFAULT_SOURCE)!!,
         layout = runCatching { Layout.valueOf(sp.getString("layout", Layout.YEAR_MONTH.name)!!) }
             .getOrDefault(Layout.YEAR_MONTH),
+        editMode = runCatching { EditMode.valueOf(sp.getString("editMode", EditMode.KEEP_BOTH.name)!!) }
+            .getOrDefault(EditMode.KEEP_BOTH),
         wifiOnly = sp.getBoolean("wifiOnly", true),
         enabled = sp.getBoolean("enabled", true),
     )
@@ -60,6 +69,7 @@ class Prefs(context: Context) {
             .putString("domain", s.domain)
             .putString("sourceDir", s.sourceDir)
             .putString("layout", s.layout.name)
+            .putString("editMode", s.editMode.name)
             .putBoolean("wifiOnly", s.wifiOnly)
             .putBoolean("enabled", s.enabled)
             .apply()
@@ -75,6 +85,18 @@ class Prefs(context: Context) {
     @Synchronized
     fun advanceWatermark(v: Long) {
         if (v > watermark) watermark = v
+    }
+
+    /** DATE_MODIFIED (secondes) de la dernière retouche traitée ; -1 = jamais initialisé. */
+    var modWatermark: Long
+        get() = sp.getLong("modWatermark", -1L)
+        set(v) {
+            sp.edit().putLong("modWatermark", v).apply()
+        }
+
+    @Synchronized
+    fun advanceModWatermark(v: Long) {
+        if (v > modWatermark) modWatermark = v
     }
 
     fun recordRun(message: String, ok: Boolean) {

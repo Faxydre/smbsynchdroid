@@ -190,6 +190,17 @@
             android:layout_width="match_parent"
             android:layout_height="48dp" />
 
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="Photo retouchée sur la tablette" />
+
+        <Spinner
+            android:id="@+id/spEdit"
+            android:layout_width="match_parent"
+            android:layout_height="48dp" />
+
         <com.google.android.material.materialswitch.MaterialSwitch
             android:id="@+id/swWifi"
             android:layout_width="match_parent"

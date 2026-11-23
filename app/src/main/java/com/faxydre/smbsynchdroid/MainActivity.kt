@@ -40,6 +40,9 @@ class MainActivity : AppCompatActivity() {
         b.spLayout.adapter = ArrayAdapter(
             this, android.R.layout.simple_spinner_dropdown_item, Layout.entries.map { it.label },
         )
+        b.spEdit.adapter = ArrayAdapter(
+            this, android.R.layout.simple_spinner_dropdown_item, EditMode.entries.map { it.label },
+        )
         fillForm(prefs.load())
 
         b.btnSave.setOnClickListener {
@@ -86,6 +89,7 @@ class MainActivity : AppCompatActivity() {
         b.inDomain.setText(s.domain)
         b.inSource.setText(s.sourceDir)
         b.spLayout.setSelection(s.layout.ordinal)
+        b.spEdit.setSelection(s.editMode.ordinal)
         b.swWifi.isChecked = s.wifiOnly
         b.swEnabled.isChecked = s.enabled
     }
@@ -112,6 +116,7 @@ class MainActivity : AppCompatActivity() {
             domain = b.inDomain.text.toString().trim(),
             sourceDir = b.inSource.text.toString().trim(),
             layout = Layout.entries[b.spLayout.selectedItemPosition.coerceAtLeast(0)],
+            editMode = EditMode.entries[b.spEdit.selectedItemPosition.coerceAtLeast(0)],
             wifiOnly = b.swWifi.isChecked,
             enabled = b.swEnabled.isChecked,
         )
@@ -128,6 +133,7 @@ class MainActivity : AppCompatActivity() {
         }
         // Première configuration : on part de maintenant (les anciennes photos via le bouton dédié).
         if (prefs.watermark < 0) prefs.watermark = System.currentTimeMillis() / 1000
+        if (prefs.modWatermark < 0) prefs.modWatermark = System.currentTimeMillis() / 1000
         SyncScheduler.ensureScheduled(this)
         refreshStatus()
         return true
