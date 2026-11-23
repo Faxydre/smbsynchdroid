@@ -47,6 +47,7 @@ class MainActivity : AppCompatActivity() {
             toast("Réglages enregistrés")
         }
         b.btnTest.setOnClickListener { testConnection() }
+        b.btnBrowse.setOnClickListener { browseShare() }
         b.btnSyncNow.setOnClickListener {
             if (!save()) return@setOnClickListener
             SyncScheduler.enqueueUpload(this)
@@ -154,6 +155,130 @@ class MainActivity : AppCompatActivity() {
                 .setPositiveButton("OK", null)
                 .show()
         }
+    }
+
+    // ---- Navigateur de dossiers du partage ----
+
+    /** Connexion gardée ouverte le temps de parcourir. */
+    private var browser: SmbTarget? = null
+
+    private fun browseShare() {
+        val s = readForm()
+        if (!s.isConfigured) {
+            toast("Renseigne d'abord l'adresse du NAS et le nom du partage")
+            return
+        }
+        b.btnBrowse.isEnabled = false
+        b.btnBrowse.text = "Connexion…"
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) { runCatching { SmbTarget.open(s) } }
+            b.btnBrowse.isEnabled = true
+            b.btnBrowse.text = "Parcourir le partage…"
+            result.onSuccess {
+                closeBrowser()
+                browser = it
+                openDir(s, RemotePaths.join(s.remoteDir))
+            }.onFailure { showError("Connexion impossible", Errors.friendly(it)) }
+        }
+    }
+
+    private fun openDir(s: SmbSettings, path: String) {
+        val t = browser ?: return
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) { runCatching { t.listDirs(path) } }
+            val dirs = result.getOrElse {
+                if (path.isNotEmpty()) {
+                    toast("Dossier « $path » introuvable, retour à la racine")
+                    openDir(s, "")
+                } else {
+                    closeBrowser()
+                    showError("Lecture du partage impossible", Errors.friendly(it))
+                }
+                return@launch
+            }
+            val hasParent = path.isNotEmpty()
+            val items = buildList {
+                if (hasParent) add("⬆   Dossier parent")
+                dirs.forEach { add("📁   $it") }
+            }
+            val title = "\\\\${s.host}\\${s.share}" + (if (path.isEmpty()) "" else "\\$path")
+            val builder = MaterialAlertDialogBuilder(this@MainActivity)
+                .setTitle(title)
+                .setPositiveButton("Choisir ce dossier") { _, _ ->
+                    closeBrowser()
+                    b.inRemoteDir.setText(path)
+                    if (save()) toast(if (path.isEmpty()) "Racine du partage choisie" else "Dossier choisi : $path")
+                }
+                .setNeutralButton("Nouveau dossier") { _, _ -> askNewFolder(s, path) }
+                .setNegativeButton("Annuler") { _, _ -> closeBrowser() }
+                .setOnCancelListener { closeBrowser() }
+            if (items.isEmpty()) {
+                builder.setMessage("Aucun sous-dossier.")
+            } else {
+                builder.setItems(items.toTypedArray()) { _, which ->
+                    val next = if (hasParent && which == 0) {
+                        path.substringBeforeLast('\\', "")
+                    } else {
+                        RemotePaths.join(path, dirs[which - if (hasParent) 1 else 0])
+                    }
+                    openDir(s, next)
+                }
+            }
+            builder.show()
+        }
+    }
+
+    private fun askNewFolder(s: SmbSettings, parent: String) {
+        val input = android.widget.EditText(this).apply {
+            hint = "Nom du dossier"
+            setSingleLine()
+        }
+        val box = android.widget.FrameLayout(this).apply {
+            val pad = (20 * resources.displayMetrics.density).toInt()
+            setPadding(pad, pad / 2, pad, 0)
+            addView(input)
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Nouveau dossier")
+            .setView(box)
+            .setPositiveButton("Créer") { _, _ ->
+                val name = input.text.toString().trim()
+                if (name.isEmpty() || name.any { it in "\\/:*?\"<>|" }) {
+                    toast("Nom invalide")
+                    openDir(s, parent)
+                    return@setPositiveButton
+                }
+                val t = browser ?: return@setPositiveButton
+                val newPath = RemotePaths.join(parent, name)
+                lifecycleScope.launch {
+                    val r = withContext(Dispatchers.IO) { runCatching { t.ensureDir(newPath) } }
+                    r.onFailure { toast("Création impossible : ${Errors.friendly(it)}") }
+                    openDir(s, if (r.isSuccess) newPath else parent)
+                }
+            }
+            .setNegativeButton("Annuler") { _, _ -> openDir(s, parent) }
+            .setOnCancelListener { openDir(s, parent) }
+            .show()
+    }
+
+    private fun closeBrowser() {
+        val t = browser ?: return
+        browser = null
+        lifecycleScope.launch(Dispatchers.IO) { t.close() }
+    }
+
+    override fun onDestroy() {
+        browser?.let { t -> Thread { t.close() }.start() }
+        browser = null
+        super.onDestroy()
+    }
+
+    private fun showError(title: String, message: String) {
+        MaterialAlertDialogBuilder(this)
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton("OK", null)
+            .show()
     }
 
     private fun confirmSyncAll() {

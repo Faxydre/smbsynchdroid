@@ -48,6 +48,14 @@ class SmbTarget private constructor(
         }
     }
 
+    /** Sous-dossiers de [path] (vide = racine du partage), triés par nom. */
+    fun listDirs(path: String): List<String> =
+        share.list(path)
+            .filter { (it.fileAttributes and FileAttributes.FILE_ATTRIBUTE_DIRECTORY.value) != 0L }
+            .map { it.fileName }
+            .filter { it != "." && it != ".." && !it.startsWith(".") }
+            .sortedWith(String.CASE_INSENSITIVE_ORDER)
+
     /** Taille du fichier distant, ou null s'il n'existe pas. */
     fun remoteSize(path: String): Long? =
         if (share.fileExists(path)) share.getFileInformation(path).standardInformation.endOfFile else null
